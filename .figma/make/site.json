@@ -1,0 +1,10 @@
+{
+  "description": "A minimalist e-commerce homepage offering a seamless shopping experience for beauty products with easy navigation and quick add-to-cart features.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
