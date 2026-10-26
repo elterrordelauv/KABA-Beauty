@@ -52,6 +52,13 @@ const CATEGORIES = [
 ]
 
 const CART_STORAGE_KEY = "kaba-beauty-cart"
+const PRODUCT_IMAGE_BUCKET = "product-images"
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+const IMAGE_TYPES: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+}
 
 const WHATSAPP_NUMBER = (import.meta.env.VITE_WHATSAPP_NUMBER ?? "").replace(
   /\D/g,
@@ -255,8 +262,7 @@ function App() {
     setCartError("")
 
     const lines = cartItems.map(
-      ({ product, quantity }) =>
-        `• ${product.name} x${quantity}: ${formatCLP(product.price * quantity)}`,
+      ({ product, quantity }) => `• ${product.name} x${quantity}`,
     )
 
     const message = [
@@ -265,10 +271,6 @@ function App() {
       "",
 
       ...lines,
-
-      "",
-
-      `Total referencial: ${formatCLP(subtotal)}`,
 
       "",
 
@@ -627,6 +629,12 @@ function AdminPage({
 
   const [editingId, setEditingId] = useState<string | null>(null)
 
+  const [imageFile, setImageFile] = useState<File | null>(null)
+
+  const [imagePreview, setImagePreview] = useState("")
+
+  const [draggingImage, setDraggingImage] = useState(false)
+
   const [form, setForm] = useState<ProductForm>({
     name: "",
 
@@ -710,6 +718,17 @@ function AdminPage({
     return () => data.subscription.unsubscribe()
   }, [])
 
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreview("")
+      return
+    }
+
+    const previewUrl = URL.createObjectURL(imageFile)
+    setImagePreview(previewUrl)
+    return () => URL.revokeObjectURL(previewUrl)
+  }, [imageFile])
+
   const signIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -744,6 +763,8 @@ function AdminPage({
   const resetForm = () => {
     setEditingId(null)
 
+    setImageFile(null)
+
     setForm({
       name: "",
       description: "",
@@ -753,6 +774,20 @@ function AdminPage({
       image_url: "",
       active: true,
     })
+  }
+
+  const selectImage = (file?: File) => {
+    if (!file) return
+    if (!IMAGE_TYPES[file.type]) {
+      setMessage("Usa una imagen JPG, PNG o WebP.")
+      return
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      setMessage("La imagen debe pesar como máximo 5 MB.")
+      return
+    }
+    setMessage("")
+    setImageFile(file)
   }
 
   const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
@@ -777,37 +812,76 @@ function AdminPage({
 
     setMessage("")
 
-    const product = {
-      ...form,
+    let uploadedImagePath: string | null = null
+    try {
+      let imageUrl = form.image_url?.trim() || null
 
-      name: form.name.trim(),
+      if (imageFile) {
+        const extension = IMAGE_TYPES[imageFile.type]
+        uploadedImagePath = `${crypto.randomUUID()}.${extension}`
+        const { error: uploadError } = await supabase.storage
+          .from(PRODUCT_IMAGE_BUCKET)
+          .upload(uploadedImagePath, imageFile, {
+            contentType: imageFile.type,
+            cacheControl: "3600",
+            upsert: false,
+          })
 
-      description: form.description.trim(),
+        if (uploadError) {
+          setMessage(`No se pudo subir la imagen: ${uploadError.message}`)
+          setSaving(false)
+          return
+        }
 
-      category: form.category.trim(),
+        imageUrl = supabase.storage
+          .from(PRODUCT_IMAGE_BUCKET)
+          .getPublicUrl(uploadedImagePath).data.publicUrl
+      }
 
-      image_url: form.image_url?.trim() || null,
+      const product = {
+        ...form,
+        name: form.name.trim(),
+        description: form.description.trim(),
+        category: form.category.trim(),
+        image_url: imageUrl,
+      }
+
+      const result = editingId
+        ? await supabase.from("products").update(product).eq("id", editingId)
+        : await supabase.from("products").insert(product)
+
+      if (result.error) {
+        if (uploadedImagePath) {
+          const { error: cleanupError } = await supabase.storage
+            .from(PRODUCT_IMAGE_BUCKET)
+            .remove([uploadedImagePath])
+          if (cleanupError) {
+            setMessage(
+              `No se pudo guardar el producto: ${result.error.message}. También falló la limpieza de la imagen: ${cleanupError.message}`,
+            )
+            setSaving(false)
+            return
+          }
+        }
+        setMessage(`No se pudo guardar el producto: ${result.error.message}`)
+      } else {
+        resetForm()
+        await onProductsChanged()
+        setMessage("Producto guardado.")
+      }
+    } catch (saveError) {
+      const detail =
+        saveError instanceof Error ? saveError.message : String(saveError)
+      setMessage(`No se pudo guardar el producto: ${detail}`)
+    } finally {
+      setSaving(false)
     }
-
-    const result = editingId
-      ? await supabase.from("products").update(product).eq("id", editingId)
-      : await supabase.from("products").insert(product)
-
-    if (result.error) {
-      setMessage(`No se pudo guardar el producto: ${result.error.message}`)
-    } else {
-      resetForm()
-
-      await onProductsChanged()
-
-      setMessage("Producto guardado.")
-    }
-
-    setSaving(false)
   }
 
   const editProduct = (product: Product) => {
     setEditingId(product.id)
+
+    setImageFile(null)
 
     setForm({
       name: product.name,
@@ -1056,17 +1130,68 @@ function AdminPage({
                   className="mt-1 w-full border border-[#E4D8D0] px-3 py-2.5"
                 />
               </label>
-              <label className="text-sm md:col-span-2">
-                URL de imagen (opcional)
-                <input
-                  type="url"
-                  value={form.image_url ?? ""}
-                  onChange={(event) =>
-                    setForm({ ...form, image_url: event.target.value })
-                  }
-                  className="mt-1 w-full border border-[#E4D8D0] px-3 py-2.5"
-                />
-              </label>
+              <div className="text-sm md:col-span-2">
+                <span className="mb-2 block">Foto del producto (opcional)</span>
+                <label
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    setDraggingImage(true)
+                  }}
+                  onDragLeave={() => setDraggingImage(false)}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    setDraggingImage(false)
+                    selectImage(event.dataTransfer.files[0])
+                  }}
+                  className={`flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 border border-dashed p-4 text-center transition-colors ${
+                    draggingImage
+                      ? "border-[#B8866A] bg-[#F5EDE8]"
+                      : "border-[#E4D8D0] bg-[#FAF8F5] hover:border-[#B8866A]"
+                  }`}
+                >
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(event) => {
+                      selectImage(event.target.files?.[0])
+                      event.target.value = ""
+                    }}
+                  />
+                  {imagePreview || form.image_url ? (
+                    <img
+                      src={imagePreview || form.image_url || ""}
+                      alt="Vista previa del producto"
+                      className="h-28 max-w-full object-contain"
+                    />
+                  ) : (
+                    <span
+                      className="text-2xl text-[#B8866A]"
+                      aria-hidden="true"
+                    >
+                      +
+                    </span>
+                  )}
+                  <span>
+                    Arrastra una imagen aquí o haz clic para elegirla
+                    <span className="mt-1 block text-xs text-[#8A7570]">
+                      JPG, PNG o WebP · máximo 5 MB
+                    </span>
+                  </span>
+                </label>
+                {(imageFile || form.image_url) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageFile(null)
+                      setForm({ ...form, image_url: "" })
+                    }}
+                    className="mt-2 text-xs text-[#8A7570] underline"
+                  >
+                    Quitar imagen
+                  </button>
+                )}
+              </div>
               <label className="flex items-center gap-2 text-sm md:col-span-2">
                 <input
                   type="checkbox"

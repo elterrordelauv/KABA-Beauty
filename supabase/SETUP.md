@@ -14,8 +14,10 @@
 6. Inicia el proyecto con `corepack pnpm dev` y abre `/admin`. Inicia sesión con el usuario creado en el paso 3 para agregar productos.
 7. Al publicar el sitio, configura esas mismas tres variables en el proveedor de alojamiento. El archivo `.env` no se debe subir a GitHub.
 
-El administrador permite agregar, editar, publicar, ocultar y eliminar productos. Para mostrar un producto como agotado, edita su stock a `0`; el catálogo público indicará que está agotado. Las imágenes se agregan mediante una URL pública, por lo que puedes alojarlas en Supabase Storage u otro servicio.
+Después de la migración de productos, ejecuta también `migrations/20261025010000_product_image_storage.sql` en **SQL Editor** para crear el almacenamiento de fotos. Si ya ejecutaste la primera migración, no la vuelvas a ejecutar; ejecuta solo la nueva migración de imágenes.
 
-El catálogo público solo puede leer productos activos. Las modificaciones requieren que la cuenta esté incluida en `product_admins`; las políticas RLS del SQL aplican esa restricción en la base de datos. La clave publishable puede estar en el frontend porque no sustituye esas políticas. Nunca uses la `service_role` key en la web.
+El administrador permite agregar, editar, publicar, ocultar y eliminar productos. Para mostrar un producto como agotado, edita su stock a `0` o usa el botón **Marcar agotado**; el catálogo público indicará que está agotado. En el formulario puedes arrastrar una foto al área indicada o seleccionarla desde tu computador. Se aceptan JPG, PNG y WebP de hasta 5 MB. El administrador sube las imágenes a Supabase Storage al guardar el producto, así que no es necesario abrir Supabase para administrar imágenes. Solo hay que configurar Storage una vez ejecutando la migración adicional.
+
+El catálogo público solo puede leer productos activos y ver las fotos públicas de productos. Las modificaciones y cargas de imágenes requieren que la cuenta esté incluida en `product_admins`; las políticas RLS aplican esa restricción en la base de datos y el almacenamiento. La clave publishable puede estar en el frontend porque no sustituye esas políticas. Nunca uses la `service_role` key en la web.
 
 El pedido se prepara en un enlace de WhatsApp. Esta versión no registra pedidos en la base de datos, no procesa pagos y no reserva inventario: disponibilidad, pago y despacho se confirman por WhatsApp.
