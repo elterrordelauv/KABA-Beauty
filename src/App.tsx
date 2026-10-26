@@ -519,14 +519,14 @@ function App() {
                 </span>
                 <h3 className="font-serif text-xl">Encuéntranos</h3>
                 <p className="mt-3 text-sm leading-6 text-[#78665E]">
-                  Mallplaza Reñaca, primer piso
+                  Mallplaza Reñaca, primer piso, local 5
                   <br />
                   Av. Borgoño 14580
                   <br />
                   Reñaca, Chile
                 </p>
                 <a
-                  href="https://www.google.com/maps/search/?api=1&query=Av.+Borgo%C3%B1o+14580%2C+Re%C3%B1aca%2C+Chile"
+                  href="https://www.google.com/maps/place/Plaza+Re%C3%B1aca/@-32.9709593,-71.561078,15z/data=!4m10!1m2!2m1!1sAv.+Borgo%C3%B1o+14580,+Re%C3%B1aca,+Chile!3m6!1s0x9689dd0dd417c705:0x567cab2a303bf6c0!8m2!3d-32.9709593!4d-71.5430536!15sCiJBdi4gQm9yZ2_DsW8gMTQ1ODAsIFJlw7FhY2EsIENoaWxlWiEiH2F2IGJvcmdvw7FvIDE0NTgwIHJlw7FhY2EgY2hpbGWSAQ9zaG9wcGluZ19jZW50ZXKaAURDaTlEUVVsUlFVTnZaRU5vZEhsalJqbHZUMjFLZGsxcldtMWlWa1pIVmxWak5WZFlSWGhqUlVVeVdrZFdkbHBHUlJBQuABAPoBBAgAEEA!16s%2Fg%2F11c2l0ll3r?entry=ttu&g_ep=EgoyMDI2MTAyMC4wIKXMDSoASAFQAw%3D%3D"
                   target="_blank"
                   rel="noreferrer"
                   className="mt-5 inline-flex text-sm text-[#8A675A] underline underline-offset-4 hover:text-[#2C2320]"
@@ -565,7 +565,7 @@ function App() {
                 <p className="mt-3 text-sm leading-6 text-[#78665E]">
                   Domingos
                   <br />
-                  <span className="text-[#2C2320]">11:00 a 15:30 hrs</span>
+                  <span className="text-[#2C2320]">12:00 a 17:00 hrs</span>
                 </p>
               </article>
 
@@ -593,12 +593,12 @@ function App() {
                   Novedades, favoritos y mucho más en nuestras redes.
                 </p>
                 <a
-                  href="https://www.instagram.com/kababeauty.ranaca/"
+                  href="https://www.instagram.com/kababeauty.renaca/"
                   target="_blank"
                   rel="noreferrer"
                   className="mt-5 inline-flex text-sm text-[#8A675A] underline underline-offset-4 hover:text-[#2C2320]"
                 >
-                  @kababeauty.ranaca{" "}
+                  @kababeauty.renaca{" "}
                   <span className="ml-1" aria-hidden="true">
                     ↗
                   </span>
