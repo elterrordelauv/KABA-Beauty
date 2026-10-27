@@ -112,10 +112,24 @@ function App() {
 
   const [cartOpen, setCartOpen] = useState(false)
   const [cartError, setCartError] = useState("")
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [detailQuantity, setDetailQuantity] = useState(1)
 
   const [query, setQuery] = useState("")
 
   const [category, setCategory] = useState("Todas")
+
+  useEffect(() => {
+    if (!selectedProduct) return
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedProduct(null)
+    }
+
+    window.addEventListener("keydown", closeOnEscape)
+
+    return () => window.removeEventListener("keydown", closeOnEscape)
+  }, [selectedProduct])
 
   const loadProducts = useCallback(async () => {
     if (!supabase) {
@@ -183,22 +197,37 @@ function App() {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, quantity = 1) => {
     if (product.stock < 1) return
 
     setCart((current) => {
       const entry = current.find((item) => item.productId === product.id)
+      const currentQuantity = entry?.quantity ?? 0
+      const quantityToAdd = Math.min(
+        Math.max(0, Math.floor(quantity)),
+        Math.max(0, product.stock - currentQuantity),
+      )
+
+      if (quantityToAdd < 1) return current
 
       if (entry) {
         return current.map((item) =>
           item.productId === product.id
-            ? { ...item, quantity: Math.min(item.quantity + 1, product.stock) }
+            ? { ...item, quantity: item.quantity + quantityToAdd }
             : item,
         )
       }
 
-      return [...current, { productId: product.id, quantity: 1 }]
+      return [...current, { productId: product.id, quantity: quantityToAdd }]
     })
+  }
+
+  const openProductDetails = (product: Product) => {
+    const quantityInCart =
+      cart.find((item) => item.productId === product.id)?.quantity ?? 0
+
+    setSelectedProduct(product)
+    setDetailQuantity(Math.min(1, Math.max(0, product.stock - quantityInCart)))
   }
 
   const changeQuantity = (product: Product, delta: number) => {
@@ -229,6 +258,15 @@ function App() {
   })
 
   const cartCount = cartItems.reduce((total, item) => total + item.quantity, 0)
+
+  const detailAvailableToAdd = selectedProduct
+    ? Math.max(
+        0,
+        selectedProduct.stock -
+          (cart.find((item) => item.productId === selectedProduct.id)
+            ?.quantity ?? 0),
+      )
+    : 0
 
   const subtotal = cartItems.reduce(
     (total, item) => total + item.product.price * item.quantity,
@@ -303,17 +341,17 @@ function App() {
   return (
     <div className="min-h-screen bg-[#FAF8F5] text-[#2C2320]">
       <header className="sticky top-0 z-30 border-b border-[#E4D8D0] bg-[#FAF8F5]/95 backdrop-blur">
-        <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between gap-4 px-5 md:px-10">
+        <div className="mx-auto flex h-[84px] max-w-7xl items-center justify-between gap-4 px-5 md:px-10">
           <button
-            className="flex items-center gap-3"
+            className="flex items-center gap-3.5"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           >
             <img
               src={logoKaba}
               alt="KABA Beauty"
-              className="h-11 w-auto object-contain"
+              className="h-14 w-14 object-cover"
             />
-            <span className="font-serif text-xl tracking-[0.14em]">
+            <span className="font-serif text-2xl tracking-[0.14em]">
               KABA <span className="text-[#B8866A]">Beauty</span>
             </span>
           </button>
@@ -337,32 +375,32 @@ function App() {
 
       <main>
         <section className="relative overflow-hidden bg-[#F1E4DC]">
-          <div className="mx-auto grid max-w-7xl items-center gap-8 px-5 py-16 md:grid-cols-2 md:px-10 md:py-24">
-            <div className="max-w-xl">
-              <p className="mb-5 text-xs uppercase tracking-[0.25em] text-[#8A675A]">
+          <div className="mx-auto grid max-w-7xl items-center gap-6 px-5 py-12 md:gap-8 md:px-10 md:py-14 lg:grid-cols-[0.95fr_1.05fr]">
+            <div className="max-w-2xl">
+              <p className="mb-5 text-sm uppercase tracking-[0.25em] text-[#8A675A]">
                 Tu belleza, a tu manera
               </p>
-              <h1 className="font-serif text-5xl leading-[1.12] md:text-7xl">
+              <h1 className="font-serif text-5xl leading-[1.08] sm:text-6xl md:text-7xl lg:text-[5.25rem]">
                 Pequeños rituales,
                 <br />
                 <i>gran belleza.</i>
               </h1>
-              <p className="mt-6 max-w-md text-base leading-7 text-[#6D5A53]">
+              <p className="mt-6 max-w-lg text-lg leading-8 text-[#6D5A53]">
                 Descubre maquillaje, cuidado facial, productos capilares y
                 accesorios seleccionados para ti.
               </p>
               <a
                 href="#catalogo"
-                className="mt-8 inline-block bg-[#2C2320] px-7 py-3.5 text-xs uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-80"
+                className="mt-8 inline-block bg-[#2C2320] px-8 py-4 text-sm uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-80"
               >
                 Explorar productos
               </a>
             </div>
-            <div className="flex min-h-64 items-center justify-center md:min-h-96">
+            <div className="flex min-h-64 items-center justify-center lg:min-h-[27rem]">
               <img
                 src={logoKaba}
                 alt=""
-                className="h-72 w-72 max-w-full object-cover opacity-90 md:h-96 md:w-96"
+                className="h-64 w-64 object-cover opacity-90 sm:h-72 sm:w-72 md:h-[22rem] md:w-[22rem] lg:h-[27rem] lg:w-[27rem] xl:h-[30rem] xl:w-[30rem]"
               />
             </div>
           </div>
@@ -433,46 +471,102 @@ function App() {
             </p>
           ) : (
             <div className="grid grid-cols-2 gap-x-4 gap-y-9 sm:grid-cols-3 lg:grid-cols-4 lg:gap-x-6">
-              {visibleProducts.map((product) => (
-                <article key={product.id} className="group">
+              {visibleProducts.map((product) => {
+                const quantityInCart =
+                  cart.find((item) => item.productId === product.id)
+                    ?.quantity ?? 0
+
+                return (
+                  <article key={product.id} className="group">
                   <div className="relative aspect-[4/5] overflow-hidden bg-[#F0E8E2]">
-                    {product.image_url ? (
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        loading="lazy"
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center p-5 text-center font-serif text-xl text-[#B8866A]">
-                        {product.name}
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => openProductDetails(product)}
+                      className="h-full w-full text-left"
+                      aria-label={`Ver detalles de ${product.name}`}
+                    >
+                      {product.image_url ? (
+                        <img
+                          src={product.image_url}
+                          alt={product.name}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center p-5 text-center font-serif text-xl text-[#B8866A]">
+                          {product.name}
+                        </div>
+                      )}
+                    </button>
                     {product.stock < 1 && (
                       <span className="absolute left-3 top-3 bg-white/90 px-3 py-1 text-[10px] uppercase tracking-wider">
                         Agotado
                       </span>
                     )}
                     {product.stock > 0 && (
-                      <button
-                        onClick={() => addToCart(product)}
-                        className="absolute bottom-3 left-3 right-3 bg-white/95 py-3 text-xs uppercase tracking-wider opacity-100 transition-colors hover:bg-[#2C2320] hover:text-white md:translate-y-2 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100"
-                      >
-                        Agregar al pedido
-                      </button>
+                      quantityInCart > 0 ? (
+                        <div
+                          className="absolute bottom-3 left-3 right-3 flex items-center justify-between bg-[#2C2320]/95 px-2 py-1 text-white shadow-sm"
+                          aria-label={`Cantidad de ${product.name} en el pedido`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => changeQuantity(product, -1)}
+                            className="h-10 w-10 text-xl transition-colors hover:bg-white/15"
+                            aria-label={`Quitar una unidad de ${product.name}`}
+                          >
+                            −
+                          </button>
+                          <span
+                            className="min-w-8 text-center text-sm tabular-nums"
+                            aria-live="polite"
+                          >
+                            {quantityInCart}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => addToCart(product)}
+                            disabled={quantityInCart >= product.stock}
+                            className="h-10 w-10 text-xl transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
+                            aria-label={`Agregar una unidad de ${product.name}`}
+                          >
+                            +
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => addToCart(product)}
+                          className="absolute bottom-3 left-3 right-3 bg-white/95 py-3 text-xs uppercase tracking-wider opacity-100 transition-colors hover:bg-[#2C2320] hover:text-white md:translate-y-2 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100"
+                        >
+                          Agregar al pedido
+                        </button>
+                      )
                     )}
                   </div>
                   <div className="pt-3">
                     <p className="text-[10px] uppercase tracking-[0.15em] text-[#A07D6E]">
                       {product.category}
                     </p>
-                    <h3 className="mt-1 font-serif text-base leading-snug">
+                    <button
+                      type="button"
+                      onClick={() => openProductDetails(product)}
+                      className="mt-1 text-left font-serif text-base leading-snug hover:text-[#8A675A]"
+                    >
                       {product.name}
-                    </h3>
+                    </button>
                     <p className="mt-1 text-sm">{formatCLP(product.price)}</p>
+                    <button
+                      type="button"
+                      onClick={() => openProductDetails(product)}
+                      className="mt-2 text-xs text-[#8A675A] underline underline-offset-4 hover:text-[#2C2320]"
+                    >
+                      Ver detalles
+                    </button>
                   </div>
-                </article>
-              ))}
+                  </article>
+                )
+              })}
             </div>
           )}
         </section>
@@ -519,7 +613,7 @@ function App() {
                 </span>
                 <h3 className="font-serif text-xl">Encuéntranos</h3>
                 <p className="mt-3 text-sm leading-6 text-[#78665E]">
-                  Mallplaza Reñaca, primer piso, local 5
+                  Mallplaza Reñaca, primer piso, local 5A
                   <br />
                   Av. Borgoño 14580
                   <br />
@@ -608,6 +702,137 @@ function App() {
           </div>
         </section>
       </main>
+
+      {selectedProduct && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/45 p-4"
+          onClick={() => setSelectedProduct(null)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="product-detail-title"
+            className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto bg-[#FAF8F5] shadow-2xl md:grid md:grid-cols-2"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedProduct(null)}
+              className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center bg-white/90 text-lg hover:bg-white"
+              aria-label="Cerrar detalles del producto"
+            >
+              ✕
+            </button>
+            <div className="aspect-square bg-[#F0E8E2] md:aspect-auto md:min-h-[28rem]">
+              {selectedProduct.image_url ? (
+                <img
+                  src={selectedProduct.image_url}
+                  alt={selectedProduct.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full min-h-64 items-center justify-center p-8 text-center font-serif text-3xl text-[#B8866A]">
+                  {selectedProduct.name}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col p-6 md:p-9">
+              <p className="text-xs uppercase tracking-[0.18em] text-[#A07D6E]">
+                {selectedProduct.category}
+              </p>
+              <h2
+                id="product-detail-title"
+                className="mt-3 font-serif text-3xl leading-tight"
+              >
+                {selectedProduct.name}
+              </h2>
+              <p className="mt-4 text-2xl">
+                {formatCLP(selectedProduct.price)}
+              </p>
+              <p className="mt-5 whitespace-pre-line text-sm leading-7 text-[#6D5A53]">
+                {selectedProduct.description ||
+                  "Consulta con nosotros para conocer más detalles de este producto."}
+              </p>
+              <p className="mt-5 text-sm text-[#78665E]">
+                {selectedProduct.stock > 0
+                  ? `Disponible: ${selectedProduct.stock} unidad${selectedProduct.stock === 1 ? "" : "es"}`
+                  : "Producto agotado"}
+              </p>
+
+              {selectedProduct.stock > 0 && (
+                <div className="mt-auto pt-8">
+                  {detailAvailableToAdd < 1 ? (
+                    <p className="border border-[#D9BBA9] bg-[#F1E4DC]/50 p-4 text-sm leading-6 text-[#78665E]">
+                      Ya agregaste al pedido todas las unidades disponibles.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm">Cantidad</span>
+                        <div
+                          className="flex items-center border border-[#D9BBA9]"
+                          aria-label="Seleccionar cantidad"
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDetailQuantity((quantity) =>
+                                Math.max(1, quantity - 1),
+                              )
+                            }
+                            disabled={detailQuantity <= 1}
+                            className="h-11 w-11 disabled:opacity-30"
+                            aria-label="Quitar una unidad"
+                          >
+                            −
+                          </button>
+                          <span
+                            className="min-w-10 text-center"
+                            aria-live="polite"
+                          >
+                            {detailQuantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDetailQuantity((quantity) =>
+                                Math.min(detailAvailableToAdd, quantity + 1),
+                              )
+                            }
+                            disabled={detailQuantity >= detailAvailableToAdd}
+                            className="h-11 w-11 disabled:opacity-30"
+                            aria-label="Agregar una unidad"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-right text-xs text-[#8A7570]">
+                        Subtotal:{" "}
+                        {formatCLP(selectedProduct.price * detailQuantity)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          addToCart(selectedProduct, detailQuantity)
+                          setSelectedProduct(null)
+                        }}
+                        disabled={
+                          detailQuantity < 1 ||
+                          detailQuantity > detailAvailableToAdd
+                        }
+                        className="mt-4 w-full bg-[#2C2320] px-5 py-4 text-xs uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#8A675A] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Agregar {detailQuantity} al pedido
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       <footer className="flex flex-col items-center justify-between gap-3 px-6 py-8 text-xs text-[#8A7570] md:flex-row md:px-10">
         <span>© {new Date().getFullYear()} KABA Beauty</span>
