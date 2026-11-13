@@ -1,81 +1,34 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import logoKaba from "./logoKABA.png"
 
+import AdminPage from "./components/AdminPage"
+
+import HeroSection from "./components/HeroSection"
+
+import ProductDetailModal from "./components/ProductDetailModal"
+
+import { getProductImages, formatCLP, type Product } from "./lib/products"
+
 import { supabase } from "./lib/supabase"
 
-type Product = {
-  id: string
-
-  name: string
-
-  description: string
-
-  category: string
-
-  price: number
-
-  stock: number
-
-  image_url: string | null
-
-  active: boolean
-}
+const CART_STORAGE_KEY = "kaba-beauty-cart"
 
 type CartEntry = {
   productId: string
+
   quantity: number
-}
-
-type ProductForm = Omit<Product, "id">
-
-const CATEGORIES = [
-  "Maquillaje",
-
-  "Cuidado facial",
-
-  "Cuidado capilar",
-
-  "Cuidado corporal",
-
-  "Fragancias",
-
-  "Accesorios",
-
-  "Otros",
-]
-
-const CART_STORAGE_KEY = "kaba-beauty-cart"
-const PRODUCT_IMAGE_BUCKET = "product-images"
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024
-const IMAGE_TYPES: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
 }
 
 const WHATSAPP_NUMBER = (import.meta.env.VITE_WHATSAPP_NUMBER ?? "").replace(
   /\D/g,
+
   "",
 )
+
 const WHATSAPP_CONTACT_URL = WHATSAPP_NUMBER
   ? `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("Hola, quisiera conocer más sobre KABA Beauty.")}`
   : null
-
-const formatCLP = (amount: number) =>
-  new Intl.NumberFormat("es-CL", {
-    style: "currency",
-
-    currency: "CLP",
-
-    maximumFractionDigits: 0,
-  }).format(amount)
 
 function readCart(): CartEntry[] {
   try {
@@ -93,6 +46,7 @@ function readCart(): CartEntry[] {
     )
   } catch (error) {
     console.error("No se pudo leer el carrito guardado.", error)
+
     return []
   }
 }
@@ -105,14 +59,18 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   const [error, setError] = useState("")
+  const [galleryEnabled, setGalleryEnabled] = useState(true)
 
   const [isAdminRoute, setIsAdminRoute] = useState(
     window.location.pathname === "/admin",
   )
 
   const [cartOpen, setCartOpen] = useState(false)
+
   const [cartError, setCartError] = useState("")
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+
   const [detailQuantity, setDetailQuantity] = useState(1)
 
   const [query, setQuery] = useState("")
@@ -144,24 +102,48 @@ function App() {
 
     setLoading(true)
 
-    const { data, error: queryError } = await supabase
-
+    const galleryResult = await supabase
       .from("products")
-
       .select(
-        "id, name, description, category, price, stock, image_url, active",
+        "id, name, description, category, price, stock, image_url, image_urls, active",
       )
-
       .order("created_at", { ascending: false })
 
-    if (queryError) {
-      setError(`No se pudo cargar el catálogo: ${queryError.message}`)
+    if (
+      galleryResult.error?.message.toLowerCase().includes("image_urls") &&
+      galleryResult.error.message.toLowerCase().includes("does not exist")
+    ) {
+      setGalleryEnabled(false)
+      const legacyResult = await supabase
+        .from("products")
+        .select(
+          "id, name, description, category, price, stock, image_url, active",
+        )
+        .order("created_at", { ascending: false })
 
+      if (legacyResult.error) {
+        setError(`No se pudo cargar el catálogo: ${legacyResult.error.message}`)
+        setProducts([])
+      } else {
+        console.warn(
+          "La migración de galería aún no está aplicada; se muestran las fotos existentes.",
+        )
+        setError("")
+        setGalleryEnabled(false)
+        setProducts(
+          (legacyResult.data ?? []).map((product) => ({
+            ...product,
+            image_urls: product.image_url ? [product.image_url] : [],
+          })),
+        )
+      }
+    } else if (galleryResult.error) {
+      setError(`No se pudo cargar el catálogo: ${galleryResult.error.message}`)
       setProducts([])
     } else {
       setError("")
-
-      setProducts(data ?? [])
+      setGalleryEnabled(true)
+      setProducts(galleryResult.data ?? [])
     }
 
     setLoading(false)
@@ -202,9 +184,12 @@ function App() {
 
     setCart((current) => {
       const entry = current.find((item) => item.productId === product.id)
+
       const currentQuantity = entry?.quantity ?? 0
+
       const quantityToAdd = Math.min(
         Math.max(0, Math.floor(quantity)),
+
         Math.max(0, product.stock - currentQuantity),
       )
 
@@ -227,6 +212,7 @@ function App() {
       cart.find((item) => item.productId === product.id)?.quantity ?? 0
 
     setSelectedProduct(product)
+
     setDetailQuantity(Math.min(1, Math.max(0, product.stock - quantityInCart)))
   }
 
@@ -238,6 +224,7 @@ function App() {
           item.productId === product.id
             ? {
                 ...item,
+
                 quantity: Math.min(item.quantity + delta, product.stock),
               }
             : item,
@@ -262,6 +249,7 @@ function App() {
   const detailAvailableToAdd = selectedProduct
     ? Math.max(
         0,
+
         selectedProduct.stock -
           (cart.find((item) => item.productId === selectedProduct.id)
             ?.quantity ?? 0),
@@ -270,6 +258,7 @@ function App() {
 
   const subtotal = cartItems.reduce(
     (total, item) => total + item.product.price * item.quantity,
+
     0,
   )
 
@@ -297,9 +286,12 @@ function App() {
       setCartError(
         "Configura VITE_WHATSAPP_NUMBER con el número de WhatsApp del negocio para recibir pedidos.",
       )
+
       return
     }
+
     if (!cartItems.length) return
+
     setCartError("")
 
     const lines = cartItems.map(
@@ -334,6 +326,7 @@ function App() {
         onProductsChanged={loadProducts}
         catalogError={error}
         products={products}
+        galleryEnabled={galleryEnabled}
       />
     )
   }
@@ -374,37 +367,7 @@ function App() {
       </header>
 
       <main>
-        <section className="relative overflow-hidden bg-[#F1E4DC]">
-          <div className="mx-auto grid max-w-7xl items-center gap-6 px-5 py-12 md:gap-8 md:px-10 md:py-14 lg:grid-cols-[0.95fr_1.05fr]">
-            <div className="max-w-2xl">
-              <p className="mb-5 text-sm uppercase tracking-[0.25em] text-[#8A675A]">
-                Tu belleza, a tu manera
-              </p>
-              <h1 className="font-serif text-5xl leading-[1.08] sm:text-6xl md:text-7xl lg:text-[5.25rem]">
-                Pequeños rituales,
-                <br />
-                <i>gran belleza.</i>
-              </h1>
-              <p className="mt-6 max-w-lg text-lg leading-8 text-[#6D5A53]">
-                Descubre maquillaje, cuidado facial, productos capilares y
-                accesorios seleccionados para ti.
-              </p>
-              <a
-                href="#catalogo"
-                className="mt-8 inline-block bg-[#2C2320] px-8 py-4 text-sm uppercase tracking-[0.16em] text-white transition-opacity hover:opacity-80"
-              >
-                Explorar productos
-              </a>
-            </div>
-            <div className="flex min-h-64 items-center justify-center lg:min-h-[27rem]">
-              <img
-                src={logoKaba}
-                alt=""
-                className="h-64 w-64 object-cover opacity-90 sm:h-72 sm:w-72 md:h-[22rem] md:w-[22rem] lg:h-[27rem] lg:w-[27rem] xl:h-[30rem] xl:w-[30rem]"
-              />
-            </div>
-          </div>
-        </section>
+        <HeroSection />
 
         <section
           id="catalogo"
@@ -434,9 +397,12 @@ function App() {
           <div className="mb-8 flex gap-2 overflow-x-auto pb-2">
             {[
               "Todas",
+
               ...new Set(
                 products
+
                   .filter((product) => product.active)
+
                   .map((product) => product.category),
               ),
             ].map((item) => (
@@ -478,92 +444,91 @@ function App() {
 
                 return (
                   <article key={product.id} className="group">
-                  <div className="relative aspect-[4/5] overflow-hidden bg-[#F0E8E2]">
-                    <button
-                      type="button"
-                      onClick={() => openProductDetails(product)}
-                      className="h-full w-full text-left"
-                      aria-label={`Ver detalles de ${product.name}`}
-                    >
-                      {product.image_url ? (
-                        <img
-                          src={product.image_url}
-                          alt={product.name}
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center p-5 text-center font-serif text-xl text-[#B8866A]">
-                          {product.name}
-                        </div>
+                    <div className="relative aspect-[4/5] overflow-hidden bg-[#F0E8E2]">
+                      <button
+                        type="button"
+                        onClick={() => openProductDetails(product)}
+                        className="h-full w-full text-left"
+                        aria-label={`Ver detalles de ${product.name}`}
+                      >
+                        {getProductImages(product)[0] ? (
+                          <img
+                            src={getProductImages(product)[0]}
+                            alt={product.name}
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center p-5 text-center font-serif text-xl text-[#B8866A]">
+                            {product.name}
+                          </div>
+                        )}
+                      </button>
+                      {product.stock < 1 && (
+                        <span className="absolute left-3 top-3 bg-white/90 px-3 py-1 text-[10px] uppercase tracking-wider">
+                          Agotado
+                        </span>
                       )}
-                    </button>
-                    {product.stock < 1 && (
-                      <span className="absolute left-3 top-3 bg-white/90 px-3 py-1 text-[10px] uppercase tracking-wider">
-                        Agotado
-                      </span>
-                    )}
-                    {product.stock > 0 && (
-                      quantityInCart > 0 ? (
-                        <div
-                          className="absolute bottom-3 left-3 right-3 flex items-center justify-between bg-[#2C2320]/95 px-2 py-1 text-white shadow-sm"
-                          aria-label={`Cantidad de ${product.name} en el pedido`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => changeQuantity(product, -1)}
-                            className="h-10 w-10 text-xl transition-colors hover:bg-white/15"
-                            aria-label={`Quitar una unidad de ${product.name}`}
+                      {product.stock > 0 &&
+                        (quantityInCart > 0 ? (
+                          <div
+                            className="absolute bottom-3 left-3 right-3 flex items-center justify-between bg-[#2C2320]/95 px-2 py-1 text-white shadow-sm"
+                            aria-label={`Cantidad de ${product.name} en el pedido`}
                           >
-                            −
-                          </button>
-                          <span
-                            className="min-w-8 text-center text-sm tabular-nums"
-                            aria-live="polite"
-                          >
-                            {quantityInCart}
-                          </span>
+                            <button
+                              type="button"
+                              onClick={() => changeQuantity(product, -1)}
+                              className="h-10 w-10 text-xl transition-colors hover:bg-white/15"
+                              aria-label={`Quitar una unidad de ${product.name}`}
+                            >
+                              −
+                            </button>
+                            <span
+                              className="min-w-8 text-center text-sm tabular-nums"
+                              aria-live="polite"
+                            >
+                              {quantityInCart}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => addToCart(product)}
+                              disabled={quantityInCart >= product.stock}
+                              className="h-10 w-10 text-xl transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
+                              aria-label={`Agregar una unidad de ${product.name}`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
                             onClick={() => addToCart(product)}
-                            disabled={quantityInCart >= product.stock}
-                            className="h-10 w-10 text-xl transition-colors hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
-                            aria-label={`Agregar una unidad de ${product.name}`}
+                            className="absolute bottom-3 left-3 right-3 bg-white/95 py-3 text-xs uppercase tracking-wider opacity-100 transition-colors hover:bg-[#2C2320] hover:text-white md:translate-y-2 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100"
                           >
-                            +
+                            Agregar al pedido
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => addToCart(product)}
-                          className="absolute bottom-3 left-3 right-3 bg-white/95 py-3 text-xs uppercase tracking-wider opacity-100 transition-colors hover:bg-[#2C2320] hover:text-white md:translate-y-2 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100"
-                        >
-                          Agregar al pedido
-                        </button>
-                      )
-                    )}
-                  </div>
-                  <div className="pt-3">
-                    <p className="text-[10px] uppercase tracking-[0.15em] text-[#A07D6E]">
-                      {product.category}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => openProductDetails(product)}
-                      className="mt-1 text-left font-serif text-base leading-snug hover:text-[#8A675A]"
-                    >
-                      {product.name}
-                    </button>
-                    <p className="mt-1 text-sm">{formatCLP(product.price)}</p>
-                    <button
-                      type="button"
-                      onClick={() => openProductDetails(product)}
-                      className="mt-2 text-xs text-[#8A675A] underline underline-offset-4 hover:text-[#2C2320]"
-                    >
-                      Ver detalles
-                    </button>
-                  </div>
+                        ))}
+                    </div>
+                    <div className="pt-3">
+                      <p className="text-[10px] uppercase tracking-[0.15em] text-[#A07D6E]">
+                        {product.category}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => openProductDetails(product)}
+                        className="mt-1 text-left font-serif text-base leading-snug hover:text-[#8A675A]"
+                      >
+                        {product.name}
+                      </button>
+                      <p className="mt-1 text-sm">{formatCLP(product.price)}</p>
+                      <button
+                        type="button"
+                        onClick={() => openProductDetails(product)}
+                        className="mt-2 text-xs text-[#8A675A] underline underline-offset-4 hover:text-[#2C2320]"
+                      >
+                        Ver detalles
+                      </button>
+                    </div>
                   </article>
                 )
               })}
@@ -571,7 +536,10 @@ function App() {
           )}
         </section>
 
-        <section id="nosotros" className="relative overflow-hidden bg-[#F1E4DC]">
+        <section
+          id="nosotros"
+          className="relative overflow-hidden bg-[#F1E4DC]"
+        >
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full border border-[#D9BBA9]/50"
@@ -704,142 +672,42 @@ function App() {
       </main>
 
       {selectedProduct && (
-        <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-black/45 p-4"
-          onClick={() => setSelectedProduct(null)}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="product-detail-title"
-            className="relative max-h-[90vh] w-full max-w-3xl overflow-y-auto bg-[#FAF8F5] shadow-2xl md:grid md:grid-cols-2"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setSelectedProduct(null)}
-              className="absolute right-3 top-3 z-10 flex h-10 w-10 items-center justify-center bg-white/90 text-lg hover:bg-white"
-              aria-label="Cerrar detalles del producto"
-            >
-              ✕
-            </button>
-            <div className="aspect-square bg-[#F0E8E2] md:aspect-auto md:min-h-[28rem]">
-              {selectedProduct.image_url ? (
-                <img
-                  src={selectedProduct.image_url}
-                  alt={selectedProduct.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full min-h-64 items-center justify-center p-8 text-center font-serif text-3xl text-[#B8866A]">
-                  {selectedProduct.name}
-                </div>
-              )}
-            </div>
-            <div className="flex flex-col p-6 md:p-9">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#A07D6E]">
-                {selectedProduct.category}
-              </p>
-              <h2
-                id="product-detail-title"
-                className="mt-3 font-serif text-3xl leading-tight"
-              >
-                {selectedProduct.name}
-              </h2>
-              <p className="mt-4 text-2xl">
-                {formatCLP(selectedProduct.price)}
-              </p>
-              <p className="mt-5 whitespace-pre-line text-sm leading-7 text-[#6D5A53]">
-                {selectedProduct.description ||
-                  "Consulta con nosotros para conocer más detalles de este producto."}
-              </p>
-              <p className="mt-5 text-sm text-[#78665E]">
-                {selectedProduct.stock > 0
-                  ? `Disponible: ${selectedProduct.stock} unidad${selectedProduct.stock === 1 ? "" : "es"}`
-                  : "Producto agotado"}
-              </p>
+        <ProductDetailModal
+          product={selectedProduct}
+          availableToAdd={detailAvailableToAdd}
+          quantity={detailQuantity}
+          onQuantityChange={setDetailQuantity}
+          onAddToCart={() => {
+            addToCart(selectedProduct, detailQuantity)
 
-              {selectedProduct.stock > 0 && (
-                <div className="mt-auto pt-8">
-                  {detailAvailableToAdd < 1 ? (
-                    <p className="border border-[#D9BBA9] bg-[#F1E4DC]/50 p-4 text-sm leading-6 text-[#78665E]">
-                      Ya agregaste al pedido todas las unidades disponibles.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-sm">Cantidad</span>
-                        <div
-                          className="flex items-center border border-[#D9BBA9]"
-                          aria-label="Seleccionar cantidad"
-                        >
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDetailQuantity((quantity) =>
-                                Math.max(1, quantity - 1),
-                              )
-                            }
-                            disabled={detailQuantity <= 1}
-                            className="h-11 w-11 disabled:opacity-30"
-                            aria-label="Quitar una unidad"
-                          >
-                            −
-                          </button>
-                          <span
-                            className="min-w-10 text-center"
-                            aria-live="polite"
-                          >
-                            {detailQuantity}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setDetailQuantity((quantity) =>
-                                Math.min(detailAvailableToAdd, quantity + 1),
-                              )
-                            }
-                            disabled={detailQuantity >= detailAvailableToAdd}
-                            className="h-11 w-11 disabled:opacity-30"
-                            aria-label="Agregar una unidad"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </div>
-                      <p className="mt-3 text-right text-xs text-[#8A7570]">
-                        Subtotal:{" "}
-                        {formatCLP(selectedProduct.price * detailQuantity)}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          addToCart(selectedProduct, detailQuantity)
-                          setSelectedProduct(null)
-                        }}
-                        disabled={
-                          detailQuantity < 1 ||
-                          detailQuantity > detailAvailableToAdd
-                        }
-                        className="mt-4 w-full bg-[#2C2320] px-5 py-4 text-xs uppercase tracking-[0.14em] text-white transition-colors hover:bg-[#8A675A] disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        Agregar {detailQuantity} al pedido
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
+            setSelectedProduct(null)
+          }}
+          onClose={() => setSelectedProduct(null)}
+        />
       )}
 
       <footer className="flex flex-col items-center justify-between gap-3 px-6 py-8 text-xs text-[#8A7570] md:flex-row md:px-10">
         <span>© {new Date().getFullYear()} KABA Beauty</span>
-        <button onClick={() => navigate(true)} className="hover:text-[#2C2320]">
-          Administrar tienda
-        </button>
       </footer>
+
+      {WHATSAPP_CONTACT_URL && (
+        <a
+          href={WHATSAPP_CONTACT_URL}
+          target="_blank"
+          rel="noreferrer"
+          aria-label="Escríbenos por WhatsApp"
+          className="fixed bottom-5 right-5 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-transform hover:scale-105"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="h-7 w-7"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M12.04 2a9.9 9.9 0 0 0-8.48 15.01L2.2 22l5.12-1.34A9.93 9.93 0 1 0 12.04 2Zm0 18.08a8.1 8.1 0 0 1-4.13-1.13l-.3-.18-3.04.8.81-2.96-.2-.31a8.14 8.14 0 1 1 6.86 3.78Zm4.47-6.1c-.24-.12-1.43-.7-1.65-.78-.22-.08-.38-.12-.54.12-.16.24-.62.78-.76.94-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.02-.37.1-.49.1-.1.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.2-.46-.4-.4-.54-.4h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.7 2.6 4.12 3.64.58.25 1.03.4 1.38.51.58.18 1.1.15 1.51.09.46-.07 1.43-.58 1.63-1.14.2-.56.2-1.04.14-1.14-.06-.1-.22-.16-.46-.28Z" />
+          </svg>
+        </a>
+      )}
 
       {cartOpen && (
         <div
@@ -875,9 +743,9 @@ function App() {
                   {cartItems.map(({ product, quantity }) => (
                     <div key={product.id} className="flex gap-4 py-4">
                       <div className="h-20 w-16 shrink-0 bg-[#F0E8E2]">
-                        {product.image_url && (
+                        {getProductImages(product)[0] && (
                           <img
-                            src={product.image_url}
+                            src={getProductImages(product)[0]}
                             alt=""
                             className="h-full w-full object-cover"
                           />
@@ -948,699 +816,6 @@ function App() {
         </div>
       )}
     </div>
-  )
-}
-
-function AdminPage({
-  onBack,
-
-  onProductsChanged,
-
-  catalogError,
-
-  products,
-}: {
-  onBack: () => void
-
-  onProductsChanged: () => Promise<void>
-
-  catalogError: string
-
-  products: Product[]
-}) {
-  const [session, setSession] = useState<boolean | null>(null)
-
-  const [email, setEmail] = useState("")
-
-  const [password, setPassword] = useState("")
-
-  const [message, setMessage] = useState("")
-
-  const [saving, setSaving] = useState(false)
-
-  const [editingId, setEditingId] = useState<string | null>(null)
-
-  const [imageFile, setImageFile] = useState<File | null>(null)
-
-  const [imagePreview, setImagePreview] = useState("")
-
-  const [draggingImage, setDraggingImage] = useState(false)
-
-  const [form, setForm] = useState<ProductForm>({
-    name: "",
-
-    description: "",
-
-    category: CATEGORIES[0],
-
-    price: 0,
-
-    stock: 0,
-
-    image_url: "",
-
-    active: true,
-  })
-
-  useEffect(() => {
-    if (!supabase) {
-      setMessage(
-        "Configura las credenciales de Supabase antes de usar el administrador.",
-      )
-
-      setSession(false)
-
-      return
-    }
-
-    const client = supabase
-
-    const verifyAdmin = async (userId: string | undefined) => {
-      if (!userId) {
-        setSession(false)
-
-        return
-      }
-
-      const { data, error: adminError } = await client
-
-        .from("product_admins")
-
-        .select("user_id")
-
-        .eq("user_id", userId)
-
-        .maybeSingle()
-
-      if (adminError) {
-        setMessage(
-          `No se pudo comprobar el acceso de administrador: ${adminError.message}`,
-        )
-
-        setSession(false)
-      } else if (!data) {
-        setMessage("Esta cuenta no está autorizada para administrar la tienda.")
-
-        setSession(false)
-      } else {
-        setMessage("")
-
-        setSession(true)
-        await onProductsChanged()
-      }
-    }
-
-    void client.auth.getSession().then(({ data, error: sessionError }) => {
-      if (sessionError) {
-        setMessage(`No se pudo comprobar la sesión: ${sessionError.message}`)
-
-        setSession(false)
-
-        return
-      }
-
-      void verifyAdmin(data.session?.user.id)
-    })
-
-    const { data } = client.auth.onAuthStateChange((_event, currentSession) => {
-      window.setTimeout(() => void verifyAdmin(currentSession?.user.id), 0)
-    })
-
-    return () => data.subscription.unsubscribe()
-  }, [])
-
-  useEffect(() => {
-    if (!imageFile) {
-      setImagePreview("")
-      return
-    }
-
-    const previewUrl = URL.createObjectURL(imageFile)
-    setImagePreview(previewUrl)
-    return () => URL.revokeObjectURL(previewUrl)
-  }, [imageFile])
-
-  const signIn = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-
-    if (!supabase) return
-
-    setSaving(true)
-
-    setMessage("")
-
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    setMessage(
-      authError ? `No se pudo iniciar sesión: ${authError.message}` : "",
-    )
-
-    setSaving(false)
-  }
-
-  const signOut = async () => {
-    if (!supabase) return
-
-    const { error: authError } = await supabase.auth.signOut()
-
-    setMessage(
-      authError ? `No se pudo cerrar sesión: ${authError.message}` : "",
-    )
-  }
-
-  const resetForm = () => {
-    setEditingId(null)
-
-    setImageFile(null)
-
-    setForm({
-      name: "",
-      description: "",
-      category: CATEGORIES[0],
-      price: 0,
-      stock: 0,
-      image_url: "",
-      active: true,
-    })
-  }
-
-  const selectImage = (file?: File) => {
-    if (!file) return
-    if (!IMAGE_TYPES[file.type]) {
-      setMessage("Usa una imagen JPG, PNG o WebP.")
-      return
-    }
-    if (file.size > MAX_IMAGE_SIZE) {
-      setMessage("La imagen debe pesar como máximo 5 MB.")
-      return
-    }
-    setMessage("")
-    setImageFile(file)
-  }
-
-  const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-
-    if (!supabase) return
-
-    if (
-      !form.name.trim() ||
-      !form.category.trim() ||
-      form.price <= 0 ||
-      form.stock < 0
-    ) {
-      setMessage(
-        "Completa el nombre, categoría y un precio mayor a cero. El stock no puede ser negativo.",
-      )
-
-      return
-    }
-
-    setSaving(true)
-
-    setMessage("")
-
-    let uploadedImagePath: string | null = null
-    try {
-      let imageUrl = form.image_url?.trim() || null
-
-      if (imageFile) {
-        const extension = IMAGE_TYPES[imageFile.type]
-        uploadedImagePath = `${crypto.randomUUID()}.${extension}`
-        const { error: uploadError } = await supabase.storage
-          .from(PRODUCT_IMAGE_BUCKET)
-          .upload(uploadedImagePath, imageFile, {
-            contentType: imageFile.type,
-            cacheControl: "3600",
-            upsert: false,
-          })
-
-        if (uploadError) {
-          setMessage(`No se pudo subir la imagen: ${uploadError.message}`)
-          setSaving(false)
-          return
-        }
-
-        imageUrl = supabase.storage
-          .from(PRODUCT_IMAGE_BUCKET)
-          .getPublicUrl(uploadedImagePath).data.publicUrl
-      }
-
-      const product = {
-        ...form,
-        name: form.name.trim(),
-        description: form.description.trim(),
-        category: form.category.trim(),
-        image_url: imageUrl,
-      }
-
-      const result = editingId
-        ? await supabase.from("products").update(product).eq("id", editingId)
-        : await supabase.from("products").insert(product)
-
-      if (result.error) {
-        if (uploadedImagePath) {
-          const { error: cleanupError } = await supabase.storage
-            .from(PRODUCT_IMAGE_BUCKET)
-            .remove([uploadedImagePath])
-          if (cleanupError) {
-            setMessage(
-              `No se pudo guardar el producto: ${result.error.message}. También falló la limpieza de la imagen: ${cleanupError.message}`,
-            )
-            setSaving(false)
-            return
-          }
-        }
-        setMessage(`No se pudo guardar el producto: ${result.error.message}`)
-      } else {
-        resetForm()
-        await onProductsChanged()
-        setMessage("Producto guardado.")
-      }
-    } catch (saveError) {
-      const detail =
-        saveError instanceof Error ? saveError.message : String(saveError)
-      setMessage(`No se pudo guardar el producto: ${detail}`)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const editProduct = (product: Product) => {
-    setEditingId(product.id)
-
-    setImageFile(null)
-
-    setForm({
-      name: product.name,
-
-      description: product.description,
-
-      category: product.category,
-
-      price: product.price,
-
-      stock: product.stock,
-
-      image_url: product.image_url ?? "",
-
-      active: product.active,
-    })
-
-    window.scrollTo({ top: 0, behavior: "smooth" })
-  }
-
-  const toggleAvailability = async (product: Product) => {
-    if (!supabase) return
-
-    setMessage("")
-
-    const { error: updateError } = await supabase
-
-      .from("products")
-
-      .update({ active: !product.active })
-
-      .eq("id", product.id)
-
-    if (updateError) {
-      setMessage(`No se pudo actualizar el producto: ${updateError.message}`)
-
-      return
-    }
-
-    await onProductsChanged()
-  }
-
-  const markOutOfStock = async (product: Product) => {
-    if (!supabase || product.stock === 0) return
-
-    setMessage("")
-
-    const { error: updateError } = await supabase
-      .from("products")
-      .update({ stock: 0 })
-      .eq("id", product.id)
-
-    if (updateError) {
-      setMessage(`No se pudo marcar como agotado: ${updateError.message}`)
-
-      return
-    }
-
-    await onProductsChanged()
-  }
-
-  const deleteProduct = async (product: Product) => {
-    if (
-      !supabase ||
-      !window.confirm(`¿Eliminar "${product.name}" permanentemente?`)
-    )
-      return
-
-    setMessage("")
-
-    const { error: deleteError } = await supabase
-      .from("products")
-      .delete()
-      .eq("id", product.id)
-
-    if (deleteError) {
-      setMessage(`No se pudo eliminar el producto: ${deleteError.message}`)
-
-      return
-    }
-
-    await onProductsChanged()
-
-    if (editingId === product.id) resetForm()
-
-    setMessage("Producto eliminado.")
-  }
-
-  return (
-    <main className="min-h-screen bg-[#FAF8F5] px-5 py-8 text-[#2C2320] md:px-10">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-8 flex items-center justify-between">
-          <a
-            href="/"
-            onClick={(event) => {
-              event.preventDefault()
-              onBack()
-            }}
-            className="flex items-center gap-3"
-          >
-            <img src={logoKaba} alt="KABA Beauty" className="h-10 w-auto" />
-            <span className="font-serif text-xl">Administración</span>
-          </a>
-          {session && (
-            <button
-              onClick={() => void signOut()}
-              className="text-sm underline"
-            >
-              Cerrar sesión
-            </button>
-          )}
-        </div>
-
-        {message && (
-          <p
-            role="status"
-            className="mb-5 border border-[#E4D8D0] bg-white p-3 text-sm"
-          >
-            {message}
-          </p>
-        )}
-        {catalogError && (
-          <p
-            role="alert"
-            className="mb-5 border border-[#D7A6A0] bg-white p-3 text-sm text-[#8B3C35]"
-          >
-            {catalogError}
-          </p>
-        )}
-        {session === null ? (
-          <p className="py-10 text-center text-sm text-[#8A7570]">
-            Comprobando sesión...
-          </p>
-        ) : !session ? (
-          <form
-            onSubmit={(event) => void signIn(event)}
-            className="mx-auto max-w-md border border-[#E4D8D0] bg-white p-6 md:p-8"
-          >
-            <h1 className="mb-2 font-serif text-3xl">Acceso privado</h1>
-            <p className="mb-6 text-sm text-[#8A7570]">
-              Inicia sesión con la cuenta administradora de la tienda.
-            </p>
-            <label className="mb-4 block text-sm">
-              Correo
-              <input
-                type="email"
-                required
-                autoComplete="username"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="mt-1 w-full border border-[#E4D8D0] px-3 py-2.5 outline-[#B8866A]"
-              />
-            </label>
-            <label className="mb-6 block text-sm">
-              Contraseña
-              <input
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="mt-1 w-full border border-[#E4D8D0] px-3 py-2.5 outline-[#B8866A]"
-              />
-            </label>
-            <button
-              disabled={saving}
-              className="w-full bg-[#2C2320] px-4 py-3 text-sm text-white disabled:opacity-60"
-            >
-              {saving ? "Ingresando..." : "Iniciar sesión"}
-            </button>
-          </form>
-        ) : (
-          <>
-            <h1 className="mb-6 font-serif text-4xl">Gestionar productos</h1>
-            <form
-              onSubmit={(event) => void saveProduct(event)}
-              className="mb-10 grid gap-4 border border-[#E4D8D0] bg-white p-5 md:grid-cols-2 md:p-7"
-            >
-              <h2 className="font-serif text-2xl md:col-span-2">
-                {editingId ? "Editar producto" : "Agregar producto"}
-              </h2>
-              <label className="text-sm">
-                Nombre
-                <input
-                  required
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm({ ...form, name: event.target.value })
-                  }
-                  className="mt-1 w-full border border-[#E4D8D0] px-3 py-2.5"
-                />
-              </label>
-              <label className="text-sm">
-                Categoría
-                <input
-                  required
-                  list="product-categories"
-                  value={form.category}
-                  onChange={(event) =>
-                    setForm({ ...form, category: event.target.value })
-                  }
-                  className="mt-1 w-full border border-[#E4D8D0] px-3 py-2.5"
-                />
-                <datalist id="product-categories">
-                  {CATEGORIES.map((item) => (
-                    <option key={item} value={item} />
-                  ))}
-                </datalist>
-              </label>
-              <label className="text-sm">
-                Precio (CLP)
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={form.price || ""}
-                  onChange={(event) =>
-                    setForm({ ...form, price: Number(event.target.value) })
-                  }
-                  className="mt-1 w-full border border-[#E4D8D0] px-3 py-2.5"
-                />
-              </label>
-              <label className="text-sm">
-                Stock
-                <input
-                  required
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={form.stock}
-                  onChange={(event) =>
-                    setForm({ ...form, stock: Number(event.target.value) })
-                  }
-                  className="mt-1 w-full border border-[#E4D8D0] px-3 py-2.5"
-                />
-              </label>
-              <label className="text-sm md:col-span-2">
-                Descripción
-                <textarea
-                  rows={3}
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm({ ...form, description: event.target.value })
-                  }
-                  className="mt-1 w-full border border-[#E4D8D0] px-3 py-2.5"
-                />
-              </label>
-              <div className="text-sm md:col-span-2">
-                <span className="mb-2 block">Foto del producto (opcional)</span>
-                <label
-                  onDragOver={(event) => {
-                    event.preventDefault()
-                    setDraggingImage(true)
-                  }}
-                  onDragLeave={() => setDraggingImage(false)}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    setDraggingImage(false)
-                    selectImage(event.dataTransfer.files[0])
-                  }}
-                  className={`flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 border border-dashed p-4 text-center transition-colors ${
-                    draggingImage
-                      ? "border-[#B8866A] bg-[#F5EDE8]"
-                      : "border-[#E4D8D0] bg-[#FAF8F5] hover:border-[#B8866A]"
-                  }`}
-                >
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="sr-only"
-                    onChange={(event) => {
-                      selectImage(event.target.files?.[0])
-                      event.target.value = ""
-                    }}
-                  />
-                  {imagePreview || form.image_url ? (
-                    <img
-                      src={imagePreview || form.image_url || ""}
-                      alt="Vista previa del producto"
-                      className="h-28 max-w-full object-contain"
-                    />
-                  ) : (
-                    <span
-                      className="text-2xl text-[#B8866A]"
-                      aria-hidden="true"
-                    >
-                      +
-                    </span>
-                  )}
-                  <span>
-                    Arrastra una imagen aquí o haz clic para elegirla
-                    <span className="mt-1 block text-xs text-[#8A7570]">
-                      JPG, PNG o WebP · máximo 5 MB
-                    </span>
-                  </span>
-                </label>
-                {(imageFile || form.image_url) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImageFile(null)
-                      setForm({ ...form, image_url: "" })
-                    }}
-                    className="mt-2 text-xs text-[#8A7570] underline"
-                  >
-                    Quitar imagen
-                  </button>
-                )}
-              </div>
-              <label className="flex items-center gap-2 text-sm md:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={form.active}
-                  onChange={(event) =>
-                    setForm({ ...form, active: event.target.checked })
-                  }
-                />
-                Publicar en la tienda
-              </label>
-              <div className="flex gap-3 md:col-span-2">
-                <button
-                  disabled={saving}
-                  className="bg-[#2C2320] px-6 py-3 text-sm text-white disabled:opacity-60"
-                >
-                  {saving
-                    ? "Guardando..."
-                    : editingId
-                      ? "Guardar cambios"
-                      : "Agregar producto"}
-                </button>
-                {editingId && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="border border-[#E4D8D0] px-5 py-3 text-sm"
-                  >
-                    Cancelar
-                  </button>
-                )}
-              </div>
-            </form>
-
-            <div className="space-y-3">
-              {products.map((product) => (
-                <article
-                  key={product.id}
-                  className="flex flex-col gap-4 border border-[#E4D8D0] bg-white p-4 sm:flex-row sm:items-center"
-                >
-                  <div className="h-20 w-16 shrink-0 bg-[#F0E8E2]">
-                    {product.image_url && (
-                      <img
-                        src={product.image_url}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-serif text-lg">{product.name}</h3>
-                    <p className="text-sm text-[#8A7570]">
-                      {product.category} · {formatCLP(product.price)} · Stock:{" "}
-                      {product.stock}
-                    </p>
-                    <p className="mt-1 text-xs">
-                      {product.active ? "Publicado" : "Oculto"}
-                      {product.stock === 0 ? " · Agotado" : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => editProduct(product)}
-                      className="border border-[#E4D8D0] px-3 py-2 text-xs"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => void markOutOfStock(product)}
-                      disabled={product.stock === 0}
-                      className="border border-[#E4D8D0] px-3 py-2 text-xs disabled:opacity-50"
-                    >
-                      {product.stock === 0 ? "Agotado" : "Marcar agotado"}
-                    </button>
-                    <button
-                      onClick={() => void toggleAvailability(product)}
-                      className="border border-[#E4D8D0] px-3 py-2 text-xs"
-                    >
-                      {product.active ? "Ocultar" : "Publicar"}
-                    </button>
-                    <button
-                      onClick={() => void deleteProduct(product)}
-                      className="border border-[#D7A6A0] px-3 py-2 text-xs text-[#8B3C35]"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </article>
-              ))}
-              {products.length === 0 && (
-                <p className="py-10 text-center text-sm text-[#8A7570]">
-                  Todavía no hay productos en la base de datos.
-                </p>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </main>
   )
 }
 

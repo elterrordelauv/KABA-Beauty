@@ -8,7 +8,7 @@ coordinan por WhatsApp.
 
 - `src/`: aplicación, estilos, cliente de Supabase y recursos visuales.
 - `supabase/migrations/`: SQL para crear las tablas, permisos y almacenamiento
-  de imágenes.
+  de imágenes y galerías de producto.
 - `supabase/SETUP.md`: instrucciones para configurar Supabase y las variables
   de entorno.
 - `.figma/make/`: configuración y comandos utilizados por Figma Make.
